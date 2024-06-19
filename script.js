@@ -4,15 +4,15 @@ import { OrbitControls } from './jsm/controls/OrbitControls.js';
 import { FBXLoader } from './jsm/loaders/FBXLoader.js';
 import { GUI } from './jsm/libs/lil-gui.module.min.js';
 
-let camera, scene, renderer, stats, object, loader, guiMorphsFolder, clock;
+let camera, scene, renderer, stats, object, loader, guiMorphsFolder;
+const clock = new THREE.Clock();
 let mixer;
-const rigidBodies = [];
 const params = {
     asset: 'Walking'
 };
 const assets = [
-    'Zombie Stand Up',
-    
+    'Walking',
+    'Jump'
 ];
 // Movement controls
 const moveState = {
@@ -30,9 +30,6 @@ const gravity = 3000;   // Gravedad aplicada durante el salto
 init();
 function init() {
     const container = document.getElementById('container');
-
-    // Initialize clock
-    clock = new THREE.Clock();
 
     // Initialize camera
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
@@ -142,7 +139,6 @@ function loadAsset(asset) {
         });
 
         scene.add(object);
-        rigidBodies.push(object);
     });
 }
 
@@ -194,10 +190,22 @@ function onKeyUp(event) {
 
 function animate() {
     const delta = clock.getDelta();
-
     if (mixer) mixer.update(delta);
     moveCharacter(delta);
-    checkCollisions();
+
+    // Aplicar el salto
+    if (isJumping) {
+        // Calcular nueva posición vertical
+        const deltaY = jumpVelocity * delta - 0.5 * gravity * delta * delta;
+        object.position.y += deltaY;
+        // Actualizar la velocidad de salto debido a la gravedad
+        jumpVelocity -= gravity * delta;
+        // Si ha tocado el suelo, detener el salto
+        if (object.position.y <= 0) {
+            object.position.y = 0;
+            isJumping = false;
+        }
+    }
 
     renderer.render(scene, camera);
     stats.update();
@@ -205,51 +213,20 @@ function animate() {
 
 function moveCharacter(delta) {
     if (!object) return;
-
     const speed = 100; // Ajustar según sea necesario
     const moveDistance = speed * delta;
-    const direction = new THREE.Vector3();
-
     if (moveState.forward) {
-        direction.z -= moveDistance;
+        object.translateZ(-moveDistance);
     }
     if (moveState.backward) {
-        direction.z += moveDistance;
+        object.translateZ(moveDistance);
     }
     if (moveState.left) {
-        direction.x -= moveDistance;
+        object.translateX(-moveDistance);
     }
     if (moveState.right) {
-        direction.x += moveDistance;
+        object.translateX(moveDistance);
     }
-
-    object.position.add(direction);
-
-    // Aplicar el salto
-    if (isJumping) {
-        const deltaY = jumpVelocity * delta - 0.5 * gravity * delta * delta;
-        object.position.y += deltaY;
-        jumpVelocity -= gravity * delta;
-        if (object.position.y <= 0) {
-            object.position.y = 0;
-            isJumping = false;
-        }
-    }
-}
-
-function checkCollisions() {
-    const objectBox = new THREE.Box3().setFromObject(object);
-
-    rigidBodies.forEach((body) => {
-        if (body !== object) {
-            const bodyBox = new THREE.Box3().setFromObject(body);
-            if (objectBox.intersectsBox(bodyBox)) {
-                const collisionNormal = new THREE.Vector3().subVectors(object.position, body.position).normalize();
-                object.position.add(collisionNormal.multiplyScalar(10));
-                body.position.sub(collisionNormal.multiplyScalar(10));
-            }
-        }
-    });
 }
 
 function addRandomCubes(numCubes) {
@@ -271,6 +248,5 @@ function addRandomCubes(numCubes) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         scene.add(mesh);
-        rigidBodies.push(mesh);
     }
 }
